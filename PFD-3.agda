@@ -9,7 +9,6 @@ open import Relation.Binary.PropositionalEquality
 
 open import Function
 
--- TODO This is chapter 3 material
 record Queue (Q : Set → ℕ → Set) : Set₁ where
   field
     empty : ∀ {A : Set} → Q A 0
@@ -79,6 +78,64 @@ instance
            ; tail = Vec.tail }
 
 private
-  open import Data.Fin
+  open import Data.Fin using (toℕ)
   test3 : DQueue ℕ 10
   test3 = foldl (DQueue ℕ) enqueue empty (tabulate toℕ)
+
+record BankerQueue (A : Set) (k : ℕ) : Set where
+  constructor queue
+  field
+    {m n} : ℕ
+    f : Vec A m
+    r : Vec A n
+    m+n=k : m + n ≡ k
+    invariant : n ≤′ m
+
+private
+  test4 : BankerQueue ℕ 4
+  test4 = queue (0 ∷ 1 ∷ []) (2 ∷ 3 ∷ []) refl ≤′-refl
+
+open import Data.Nat.Properties
+
+open ≡-Reasoning
+
+banker-queue : ∀ {A : Set} {m n k} → Vec A m → Vec A n → m + n ≡ k → BankerQueue A k
+banker-queue {m = m} {n = n} f r m+n=k with compare n m
+banker-queue f r m+n=k | less m k = queue f r m+n=k (≤′-step (m≤′m+n m k))
+banker-queue f r m+n=k | equal m = queue f r m+n=k ≤′-refl
+banker-queue {k = k'} f r m+n=k | greater m k =
+  queue (f ++ reverse r) [] m+n=k' (≤⇒≤′ z≤n)
+  where
+  m+n=k' = begin m + suc (m + k) + zero ≡⟨ +-right-identity _ ⟩
+                 m + suc (m + k)        ≡⟨ m+n=k ⟩
+                 k' ∎
+
+Bempty : ∀ {A : Set} → BankerQueue A 0
+Bempty = queue [] [] refl ≤′-refl
+
+Benqueue : ∀ {A : Set} {k} → BankerQueue A k → A → BankerQueue A (suc k)
+Benqueue {k = k} (queue {m} {n} f r m+n=k invariant) a
+  = banker-queue f (a ∷ r) m+n=k'
+  where
+  m+n=k' = begin m + suc n ≡⟨ +-suc m n ⟩
+                 suc m + n ≡⟨ cong suc m+n=k ⟩
+                 suc k ∎
+
+Bhead : ∀ {A : Set} {k} → BankerQueue A (suc k) → A
+Bhead (queue {n = n} [] _ m+n=k invariant) with n | m+n=k
+Bhead (queue         [] _ _     ()) | ._ | refl --invariant violation
+Bhead (queue (x ∷ f) r m+n=k invariant) = x
+
+Btail : ∀ {A : Set} {k} → BankerQueue A (suc k) → BankerQueue A k
+Btail (queue {n = n} [] _ m+n=k invariant) with n | m+n=k
+Btail (queue         [] _ _     ()) | ._ | refl --invariant violation
+Btail (queue (x ∷ f) r m+n=k invariant)
+  = banker-queue f r (cong pred m+n=k)
+
+instance
+  BankQueue : Queue BankerQueue
+  BankQueue
+    = record { empty = Bempty
+             ; enqueue = Benqueue
+             ; head = Bhead
+             ; tail = Btail }
