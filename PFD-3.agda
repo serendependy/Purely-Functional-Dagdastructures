@@ -139,3 +139,70 @@ instance
              ; enqueue = Benqueue
              ; head = Bhead
              ; tail = Btail }
+
+open import Data.Bool
+open import Data.List
+
+record Sortable (Sort : Set → Set) : Set₁ where
+  field
+    new : ∀ {A : Set} → (A → A → Bool) → Sort A
+    add : ∀ {A : Set} → A → Sort A → Sort A
+    sort : ∀ {A : Set} → Sort A → List A
+
+
+-- bunch of stuff for PowTree not required by PFD
+double : ℕ → ℕ
+double zero = zero
+double (suc n) = suc (suc (double n))
+
+pow₂ : ℕ → ℕ
+pow₂ zero = 1
+pow₂ (suc n) = double (pow₂ n)
+
+double-lem : ∀ n → n + n ≡ double n
+double-lem zero = refl
+double-lem (suc n)
+  = begin suc (n + suc n)   ≡⟨ cong suc $ 
+          begin n + suc n   ≡⟨ +-suc n n ⟩
+                suc (n + n) ∎ ⟩
+          suc (suc (n + n)) ≡⟨ cong (suc ∘ suc) (double-lem n) ⟩
+          (suc (suc (double n))) ∎
+
+-- wrap the invariant in a data structure
+data PowTree (A : Set) : (width : ℕ) → Set where
+  []  : ∀ {w} → PowTree A w
+  _∷_ : ∀ {w₁ w₂} → w₁ ≤′ w₂ → (xs : Vec A (pow₂ w₁)) → PowTree A w₂ → PowTree A w₁
+
+-- actual data structure from PFD
+record BOMSort (w : ℕ) (A : Set) : Set where
+  constructor sortable
+  field
+    le : A → A → Bool
+    segments : PowTree A w
+
+-- summon the implicit argument from the nether
+len : ∀ {A : Set} {n} → Vec A n → ℕ
+len {n = n} xs = n
+
+-- for merging arbitrary vecs
+merge : ∀ {A : Set} {m n} → (A → A → Bool) → Vec A m → Vec A n → Vec A (m + n)
+merge {A} le = λ xs ys → mrg xs ys
+  where
+  mrg : ∀ {m n} → Vec A m → Vec A n → Vec A (m + n)
+  mrg [] ys = ys
+  mrg {m} xs [] rewrite +-right-identity m = xs
+  mrg (x ∷ xs) (y ∷ ys)
+    = if le x y then x ∷ mrg xs (y ∷ ys)
+                else y ∷ subst (Vec A) (sym (+-suc (len xs) _)) (mrg (x ∷ xs) ys)
+
+-- for merging vecs in the PowTree
+mergePow : ∀ {A : Set} {n} → (A → A → Bool) → (xs ys : Vec A (pow₂ n)) → Vec A (pow₂ $ suc n)
+mergePow {n = n} le xs ys with merge le xs ys
+...  | res rewrite double-lem $ pow₂ n = res
+
+instance
+  BOMSortable : {w : ℕ} → Sortable (BOMSort w)
+  BOMSortable {w}
+    = record { new = λ le → sortable le $ [] {w = w}
+             ; add = {!!}
+             ; sort = {!!} }
